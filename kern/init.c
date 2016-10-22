@@ -7,16 +7,24 @@
 #include <kern/monitor.h>
 #include <kern/console.h>
 
+static char strs[] = "0123456789abcdef";
+static char enterstr[] = "%F0%B0entering test_backtrace %d\n%F7%B0";
+static char leavestr[] = "%F0%B0leaving test_backtrace %d\n%F7%B0";
+
 // Test the stack backtrace function (lab 1 only)
 void
 test_backtrace(int x)
 {
-	cprintf("entering test_backtrace %d\n", x);
+	enterstr[2] = strs[x];
+	enterstr[5] = strs[15 - x];
+	cprintf(enterstr, x);
 	if (x > 0)
 		test_backtrace(x-1);
 	else
 		mon_backtrace(0, 0, 0);
-	cprintf("leaving test_backtrace %d\n", x);
+	leavestr[2] = strs[15 - x];
+	leavestr[5] = strs[x];
+	cprintf(leavestr, x);
 }
 
 void
