@@ -10,6 +10,7 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/pmap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -25,6 +26,9 @@ static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
 	{ "backtrace", "BackTrace", mon_backtrace },
+	{ "showmappings", "Show the page mappings between A and B", mon_showmappings },
+	{ "changemappings", "Change the page mappings", mon_changemappings },
+	{ "dumppmem", "Dump the content at physical address", mon_dumppmem },
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -55,6 +59,23 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+uint32_t mon_hexread(char *s){
+	if (s[1] == 'x') s = s + 2;
+	uint32_t re = 0;
+	for (; s[0]; s ++ )
+		if (s[0] >= '0' && s[0] <= '9')
+			re = re * 16 + s[0] - '0';
+		else if (s[0] >= 'a' && s[0] <= 'f')
+			re = re * 16 + s[0] - 'a' + 10;
+		else if (s[0] >= 'A' && s[0] <= 'F')
+			re = re * 16 + s[0] - 'A' + 10;
+		else{
+			cprintf("Wrong hex num input, return 0.\n");
+			return 0;
+		}
+	return re;
+}
+
 void bt_print(int now, uint32_t ebp, uint32_t eip){
     int i = 0;
     if (!ebp){
@@ -76,6 +97,179 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	cprintf("Stack backtrace:\n");
 	int ebp = read_ebp();
 	bt_print(1, ebp, *(uint32_t*)(ebp + 4));
+	return 0;
+}
+
+int
+mon_showmappings(int argc, char **argv, struct Trapframe *tf)
+{
+	if (argc < 3){
+		cprintf("Input error! must be two hex num.\n");
+		return 0;
+	}
+	uint32_t l, r;
+	l = mon_hexread(argv[1]);
+	r = mon_hexread(argv[2]);
+	l &= 0xfffff000;
+	r &= 0xfffff000;
+	if (l > r){
+		uint32_t t = l;
+		l = r;
+		r = t;
+	}//cprintf("%x %x\n", l, r);
+	uint32_t perm = 0xffffffff, last = 0;
+	for (; ; l += PGSIZE){
+		pte_t *pte = pgdir_walk(kern_pgdir, (void*)l, 0);
+		uint32_t nowperm = 0xf0f0f0f0;
+		if (pte != NULL && ((*pte) & PTE_P)) nowperm = (*pte) & 0x7;
+		if (l < last || l > r) nowperm = 0xffffffff;
+		if (nowperm != perm){//cprintf("%03x %03x ", perm, nowperm);
+			if (perm == 0xffffffff){
+			}
+			else if (perm == 0xf0f0f0f0){
+				cprintf("0x%08x - 0x%08x: NO PAGE\n", last, l - 1);
+			}
+			else if ((perm & PTE_U) && (perm & PTE_W)){
+				cprintf("0x%08x - 0x%08x: User RW   | Kern RW\n", last, l - 1);
+			}
+			else if (perm & PTE_U){
+				cprintf("0x%08x - 0x%08x: User R    | Kern R\n", last, l - 1);
+			}
+			else if (perm & PTE_W){
+				cprintf("0x%08x - 0x%08x: User NONE | Kern RW\n", last, l - 1);
+			}
+			else{
+				cprintf("0x%08x - 0x%08x: User NONE | Kern R\n", last, l - 1);
+			}
+			perm = nowperm;
+			last = l;
+		}
+		if (nowperm == 0xffffffff) break;
+	}
+	return 0;
+}
+
+int
+mon_changemappings(int argc, char **argv, struct Trapframe *tf)
+{
+	if (argc < 3){
+		cprintf("Input error!\nchangemappings [vaddr] [-X]\n-p: with a hex num to change the permission.\n-a: with one hex num as physical memory address.\n    Note we can't select a physical page which is free or certain kernel page(i.e. pages with pp_ref = 0).\n    Or without anything to get a new page, the page will be cleared, permision will be USER: NONE | KERN: RW.\n-d: delete the page mapping.\n");
+		return 0;
+	}
+	uint32_t l, r;
+	l = mon_hexread(argv[1]);
+	pte_t *pte = pgdir_walk(kern_pgdir, (void*)l, 0);
+	if (argv[2][0] == '-' && argv[2][1] == 'p'){
+		r = mon_hexread(argv[3]);
+		l &= 0xfffff000;
+		r &= 0xfff;
+		if (pte != NULL){
+			*pte = ((*pte) & 0xfffff000) + r;
+			cprintf("Successfully changed!\n");
+			char *arg[3];
+			arg[0] = argv[0];
+			arg[1] = argv[1];
+			arg[2] = argv[1];
+			mon_showmappings(argc, arg, tf);
+		}
+		else{
+			cprintf("Page not exist!\n");
+		}
+	}
+	else if (argv[2][0] == '-' && argv[2][1] == 'd'){
+		if (pte == NULL){
+			cprintf("Page not exist!\n");
+		}
+		else{
+			page_remove(kern_pgdir, (void*)l);
+			cprintf("Delete success!\n");
+			char *arg[3];
+			arg[0] = argv[0];
+			arg[1] = argv[1];
+			arg[2] = argv[1];
+			mon_showmappings(argc, arg, tf);
+		}
+	}
+	else if (argv[2][0] == '-' && argv[2][1] == 'a'){
+		if (argc == 3){
+			struct PageInfo *pp = page_alloc(ALLOC_ZERO);
+			if (pp == NULL){
+				cprintf("Out of memory!\n");
+				page_free(pp);
+			}
+			else{
+				uint32_t res = page_insert(kern_pgdir, pp, (void*)l, PTE_W | PTE_P);
+				if (res){
+					cprintf("Out of memory!\n");
+					page_free(pp);
+				}
+				else{
+					cprintf("Add success!\n");
+					char *arg[3];
+					arg[0] = argv[0];
+					arg[1] = argv[1];
+					arg[2] = argv[1];
+					mon_showmappings(argc, arg, tf);
+				}
+			}
+		}
+		else{
+			r = mon_hexread(argv[3]);
+			struct PageInfo *pp = pages + (r >> 12);
+			if ((r >> 12) >= npages){
+				cprintf("Paddr too large!\n");
+			}
+			else{
+				if (pp -> pp_ref == 0){
+					cprintf("Error! pp -> ref = 0.\n");
+				}
+				else{
+					uint32_t res = page_insert(kern_pgdir, pp, (void*)l, PTE_W | PTE_P);
+					if (res){
+						cprintf("Out of memory!\n");
+						page_free(pp);
+					}
+					else{
+						cprintf("Add success!\n");
+						char *arg[3];
+						arg[0] = argv[0];
+						arg[1] = argv[1];
+						arg[2] = argv[1];
+						mon_showmappings(argc, arg, tf);
+					}
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+int
+mon_dumppmem(int argc, char **argv, struct Trapframe *tf)
+{
+	if (argc < 3){
+		cprintf("Input error! Need one hex num: physical address and one hex num: N mean output N uint32_t num.");
+		return 0;
+	}
+	uint32_t l, r;
+	l = mon_hexread(argv[1]);
+	r = mon_hexread(argv[2]);
+	if (npages * 4096 <= l + r * 4){
+		cprintf("Memory address out of bound.\n");
+	}
+	else{
+		int tot = 0;
+		for (; r; l += 0x4, r -- ){
+			if (tot == 0){
+				cprintf("0x%08x: ", l);
+			}
+			cprintf("0x%08x ", *(uint32_t*)(l + 0xf0000000));
+			if ( ++ tot == 4){
+				cprintf("\n");
+				tot = 0;
+			}
+		}
+	}
 	return 0;
 }
 
