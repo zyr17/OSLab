@@ -161,6 +161,8 @@ mem_init(void)
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
+	envs = boot_alloc(sizeof(struct Env) * NENV);
+	memset(envs, 0, sizeof(struct Env) * NENV);
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -194,6 +196,7 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
+	boot_map_region(kern_pgdir, UENVS, ROUNDUP(NENV * sizeof(struct Env), PGSIZE), PADDR(envs), PTE_U);
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -558,6 +561,18 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
+	uint32_t right = (uint32_t)ROUNDUP(va + len, PGSIZE), left = (uint32_t)ROUNDDOWN(va, PGSIZE);
+	perm |= PTE_P;
+	for (; left < right; left += PGSIZE)
+	{
+		pte_t *pte = pgdir_walk(env -> env_pgdir, (void*)left, 0);
+		if (left >= ULIM ||	pte == NULL || (*pte & perm) != perm)
+		{
+			if (left < (uint32_t)va) user_mem_check_addr = (uint32_t)va;
+			else user_mem_check_addr = left;
+			return -E_FAULT;
+		}
+	}
 
 	return 0;
 }

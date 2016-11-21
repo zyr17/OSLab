@@ -30,9 +30,17 @@ static struct Command commands[] = {
 	{ "showmappings", "Show the page mappings between A and B", mon_showmappings },
 	{ "changemappings", "Change the page mappings", mon_changemappings },
 	{ "dumppmem", "Dump the content at physical address", mon_dumppmem },
+	{ "exit", "Wxit QEMU Monitor", mon_exit },
 };
 
 /***** Implementations of basic kernel monitor commands *****/
+
+
+int
+mon_exit(int argc, char **argv, struct Trapframe *tf)
+{
+	return -1;
+}
 
 int
 mon_help(int argc, char **argv, struct Trapframe *tf)

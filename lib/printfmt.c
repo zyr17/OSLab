@@ -230,6 +230,8 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 		case '%':
 			putch(ch, putdat);
 			break;
+		
+		/*
 		extern int cga_foreground, cga_background;
 		// change cga foreground
 		case 'F':
@@ -246,6 +248,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 			else fmt -- ;
 			fmt ++ ;
 			break;
+		*/
 
 		// unrecognized escape sequence - just print it literally
 		default:
