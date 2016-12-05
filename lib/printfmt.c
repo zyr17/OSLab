@@ -208,11 +208,9 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 		// (unsigned) octal
 		case 'o':
 			// Replace this with your code.
-			putch('X', putdat);
-			putch('X', putdat);
-			putch('X', putdat);
-			break;
-
+			num = getuint(&ap, lflag);
+			base = 8;
+			goto number;
 		// pointer
 		case 'p':
 			putch('0', putdat);
@@ -234,6 +232,25 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 		case '%':
 			putch(ch, putdat);
 			break;
+		
+		/*
+		extern int cga_foreground, cga_background;
+		// change cga foreground
+		case 'F':
+			if ((*fmt >= '0' && *fmt <= '9') || (*fmt >= 'a' && *fmt <= 'f'))
+				cga_foreground = *fmt >= '0' && *fmt <= '9' ? *fmt - '0' : *fmt - 'a' + 10;
+			else fmt -- ;
+			fmt ++ ;
+			break;
+
+		// change cga background
+		case 'B':
+			if ((*fmt >= '0' && *fmt <= '9') || (*fmt >= 'a' && *fmt <= 'f'))
+				cga_background = *fmt >= '0' && *fmt <= '9' ? *fmt - '0' : *fmt - 'a' + 10;
+			else fmt -- ;
+			fmt ++ ;
+			break;
+		*/
 
 		// unrecognized escape sequence - just print it literally
 		default:

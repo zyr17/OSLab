@@ -17,6 +17,25 @@
 
 static void boot_aps(void);
 
+static char strs[] = "0123456789abcdef";
+static char enterstr[] = "%F0%B0entering test_backtrace %d\n%F7%B0";
+static char leavestr[] = "%F0%B0leaving test_backtrace %d\n%F7%B0";
+
+// Test the stack backtrace function (lab 1 only)
+void
+test_backtrace(int x)
+{
+	enterstr[2] = strs[x];
+	enterstr[5] = strs[15 - x];
+	cprintf(enterstr, x);
+	if (x > 0)
+		test_backtrace(x-1);
+	else
+		mon_backtrace(0, 0, 0);
+	leavestr[2] = strs[15 - x];
+	leavestr[5] = strs[x];
+	cprintf(leavestr, x);
+}
 
 void
 i386_init(void)
@@ -47,9 +66,9 @@ i386_init(void)
 
 	// Lab 4 multitasking initialization functions
 	pic_init();
-
 	// Acquire the big kernel lock before waking up APs
 	// Your code here:
+	lock_kernel();
 
 	// Starting non-boot CPUs
 	boot_aps();
@@ -59,9 +78,10 @@ i386_init(void)
 	ENV_CREATE(TEST, ENV_TYPE_USER);
 #else
 	// Touch all you want.
-	ENV_CREATE(user_primes, ENV_TYPE_USER);
+	ENV_CREATE(user_yield, ENV_TYPE_USER);
+	ENV_CREATE(user_yield, ENV_TYPE_USER);
+	ENV_CREATE(user_yield, ENV_TYPE_USER);
 #endif // TEST*
-
 	// Schedule and run the first user environment!
 	sched_yield();
 }
@@ -101,7 +121,7 @@ boot_aps(void)
 // Setup code for APs
 void
 mp_main(void)
-{
+{//cprintf("in mp_main()\n");
 	// We are in high EIP now, safe to switch to kern_pgdir 
 	lcr3(PADDR(kern_pgdir));
 	cprintf("SMP: CPU %d starting\n", cpunum());
@@ -116,9 +136,11 @@ mp_main(void)
 	// only one CPU can enter the scheduler at a time!
 	//
 	// Your code here:
+	lock_kernel();
+	sched_yield();
 
 	// Remove this after you finish Exercise 4
-	for (;;);
+	//for (;;);
 }
 
 /*

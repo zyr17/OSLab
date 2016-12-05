@@ -159,14 +159,14 @@ cga_init(void)
 	crt_pos = pos;
 }
 
-
+int cga_foreground = 0x7, cga_background = 0x0;
 
 static void
 cga_putc(int c)
 {
 	// if no attribute given, then use black on white
 	if (!(c & ~0xFF))
-		c |= 0x0700;
+		c |= (cga_foreground << 8) | (cga_background << 12);
 
 	switch (c & 0xff) {
 	case '\b':
