@@ -292,8 +292,29 @@ sys_page_unmap(envid_t envid, void *va)
 static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
-	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+	struct Env *target;
+	struct PageInfo *pp;
+	pte_t *pte;
+	int ret = 0;
+	if ((ret = envid2env(envid, &target, 0)) != 0) return ret;
+	if (!target -> env_ipc_recving) return - E_IPC_NOT_RECV;
+
+	if ((int)srcva < UTOP && ((perm | PTE_U | PTE_P) != perm || perm & (~PTE_SYSCALL))) return - E_INVAL;
+
+	if ((int)target -> env_ipc_dstva < UTOP && (int)srcva < UTOP)
+	{
+		if ((uint32_t)srcva % PGSIZE != 0) return - E_INVAL;
+		if ((pp = page_lookup(curenv -> env_pgdir, srcva, &pte)) == NULL) return - E_INVAL;
+		if ((perm & PTE_W) && ((*pte) & PTE_W) == 0) return - E_INVAL;
+		if ((ret = page_insert(target -> env_pgdir, pp, target -> env_ipc_dstva, perm)) != 0) return ret;
+		target -> env_ipc_perm = perm;
+	}
+	target -> env_ipc_value = value;
+	target -> env_ipc_from = curenv -> env_id;
+	target -> env_ipc_recving = 0;
+	target -> env_tf.tf_regs.reg_eax = 0;
+	target -> env_status = ENV_RUNNABLE;
+	return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -310,8 +331,16 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 static int
 sys_ipc_recv(void *dstva)
 {
-	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
+	struct Env *env;
+	//cprintf("%d ipc_recv: %x\n", SYS_ipc_recv, (uint32_t)dstva);
+	if ((uint32_t)dstva < UTOP && (int)dstva % PGSIZE != 0) return - E_INVAL;
+	curenv -> env_ipc_recving = true;
+	curenv -> env_ipc_dstva = dstva;
+	curenv -> env_ipc_value = 0;
+	curenv -> env_ipc_from = 0;
+	curenv -> env_ipc_perm = 0;
+	curenv -> env_status = ENV_NOT_RUNNABLE;
+	sched_yield();
 	return 0;
 }
 
@@ -324,6 +353,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	// LAB 3: Your code here.
 
 	//panic("syscall not implemented");
+	
+	//cprintf("syscall: %d %d %d %d %d %d\n", syscallno, a1, a2, a3, a4, a5);
 
 	switch (syscallno) {
 	case SYS_cputs:
@@ -350,6 +381,10 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_page_unmap(a1, (void*)a2);
 	case SYS_env_set_pgfault_upcall:
 		return sys_env_set_pgfault_upcall(a1, (void*)a2);
+	case SYS_ipc_try_send:
+		return sys_ipc_try_send(a1, a2, (void*)a3, a4);
+	case SYS_ipc_recv:
+		return sys_ipc_recv((void*)a1);
 	default:
 		return -E_INVAL;
 	}

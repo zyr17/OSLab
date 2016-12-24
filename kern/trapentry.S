@@ -79,11 +79,31 @@ TRAPHANDLER(_handler_13, T_GPFLT);
 TRAPHANDLER(_handler_14, T_PGFLT);
 TRAPHANDLER_RESERVED;//0xf
 TRAPHANDLER_NOEC(_handler_16, T_FPERR);
-.data; .fill 15, 4, 0;//0x1f
-.data; .fill 16, 4, 0;//0x2f
+TRAPHANDLER_NOEC(_handler_17, T_ALIGN);
+TRAPHANDLER_NOEC(_handler_18, T_MCHK);
+TRAPHANDLER_NOEC(_handler_19, T_SIMDERR);
+.data; .fill 12, 4, 0;//0x1f
+TRAPHANDLER_NOEC(_irq_handler_0, IRQ_OFFSET + IRQ_TIMER);
+TRAPHANDLER_NOEC(_irq_handler_1, IRQ_OFFSET + IRQ_KBD);
+TRAPHANDLER_RESERVED;
+TRAPHANDLER_RESERVED;
+TRAPHANDLER_NOEC(_irq_handler_4, IRQ_OFFSET + IRQ_SERIAL);
+TRAPHANDLER_RESERVED;
+TRAPHANDLER_RESERVED;
+TRAPHANDLER_NOEC(_irq_handler_7, IRQ_OFFSET + IRQ_SPURIOUS);
+.data; .fill 6, 4, 0;
+TRAPHANDLER_NOEC(_irq_handler_14, IRQ_OFFSET + IRQ_IDE);
+TRAPHANDLER_RESERVED;
+//.data; .fill 16, 4, 0;//0x2f
 TRAPHANDLER_NOEC(_handler_48, T_SYSCALL);
-.data; .fill 15, 4, 0;//0x3f
+TRAPHANDLER_RESERVED;
+TRAPHANDLER_RESERVED;
+TRAPHANDLER_NOEC(_irq_handler_19, IRQ_OFFSET + IRQ_ERROR);
+.data; .fill 12, 4, 0;
+//.data; .fill 15, 4, 0;//0x3f
 .data; .fill 192, 4, 0;//0xff
+.data; .fill 244, 4, 0;
+TRAPHANDLER_NOEC(_handler_500, T_DEFAULT);
 
 /*
  * Lab 3: Your code here for _alltraps
